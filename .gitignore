@@ -1,0 +1,21 @@
+# Xcode user state
+**/xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+
+# Build output
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods (unused but standard)
+Pods/
+
+# macOS
+.DS_Store

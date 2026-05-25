@@ -1,10 +1,3 @@
-//
-//  webtoonstitchApp.swift
-//  webtoonstitch
-//
-//  Created by Jonathan Pang on 5/25/26.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,7 +5,8 @@ import SwiftData
 struct webtoonstitchApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Project.self,
+            Panel.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +19,7 @@ struct webtoonstitchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ProjectListView()
         }
         .modelContainer(sharedModelContainer)
     }
