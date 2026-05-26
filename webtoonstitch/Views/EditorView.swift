@@ -14,6 +14,7 @@ struct EditorView: View {
     @State private var showingSettings = false
     @State private var selectedPanelID: UUID?
     @State private var cropTarget: Panel?
+    @State private var showingExport = false
 
     private var sortedPanels: [Panel] {
         project.panels.sorted { $0.order < $1.order }
@@ -51,6 +52,13 @@ struct EditorView: View {
                     Label("Project Settings", systemImage: "gearshape")
                 }
 
+                Button {
+                    showingExport = true
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .disabled(isImporting || sortedPanels.isEmpty)
+
                 PhotosPicker(
                     selection: $selectedItems,
                     matching: .images,
@@ -73,6 +81,9 @@ struct EditorView: View {
         }
         .fullScreenCover(item: $cropTarget) { panel in
             CropSheet(panel: panel)
+        }
+        .sheet(isPresented: $showingExport) {
+            ExportSheet(project: project)
         }
         .onChange(of: selectedItems) { _, newItems in
             guard !newItems.isEmpty else { return }
