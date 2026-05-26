@@ -12,15 +12,23 @@ struct EditorView: View {
     @State private var importTotal = 0
     @State private var importError: String?
     @State private var showingSettings = false
+    @State private var selectedPanelID: UUID?
 
     private var sortedPanels: [Panel] {
         project.panels.sorted { $0.order < $1.order }
+    }
+
+    private var selectedPanel: Panel? {
+        guard let id = selectedPanelID else { return nil }
+        return sortedPanels.first(where: { $0.id == id })
     }
 
     var body: some View {
         ZStack {
             Color(hex: project.backgroundHex)
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { selectedPanelID = nil }
 
             if sortedPanels.isEmpty {
                 emptyState
@@ -52,6 +60,13 @@ struct EditorView: View {
                 .disabled(isImporting)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let panel = selectedPanel {
+                inspector(for: panel)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: selectedPanelID)
         .sheet(isPresented: $showingSettings) {
             CanvasSettingsSheet(project: project)
         }
@@ -87,10 +102,26 @@ struct EditorView: View {
     }
 
     private var canvasScroll: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(sortedPanels) { panel in
-                    PanelRowView(panel: panel)
+        GeometryReader { geo in
+            let displayWidth = geo.size.width
+            let canvasToScreen = displayWidth / CGFloat(project.canvasWidth)
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(sortedPanels.enumerated()), id: \.element.id) { idx, panel in
+                        let nextOverlapCanvas = idx + 1 < sortedPanels.count
+                            ? sortedPanels[idx + 1].overlapWithPrevious
+                            : 0
+                        let nextOverlapDisplay = CGFloat(nextOverlapCanvas) * canvasToScreen
+
+                        PanelRowView(
+                            panel: panel,
+                            displayWidth: displayWidth,
+                            nextOverlapPx: nextOverlapDisplay,
+                            isSelected: selectedPanelID == panel.id,
+                            onTap: { toggleSelection(panel) }
+                        )
+                    }
                 }
             }
         }
@@ -105,6 +136,72 @@ struct EditorView: View {
         .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
+
+    @ViewBuilder
+    private func inspector(for panel: Panel) -> some View {
+        let panels = sortedPanels
+        let idx = panels.firstIndex(where: { $0.id == panel.id })
+        let canMoveUp = (idx ?? 0) > 0
+        let canMoveDown = (idx.map { $0 < panels.count - 1 }) ?? false
+
+        let previousHeight: Double = {
+            guard let i = idx, i > 0 else { return 0 }
+            return Double(panels[i - 1].height)
+        }()
+        let bound = max(50, previousHeight)
+        let overlapRange = -bound ... bound
+
+        PanelInspectorView(
+            panel: panel,
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            overlapRange: overlapRange,
+            onMoveUp: { move(panel, by: -1) },
+            onMoveDown: { move(panel, by: +1) },
+            onDelete: { delete(panel) }
+        )
+    }
+
+    // MARK: - Selection
+
+    private func toggleSelection(_ panel: Panel) {
+        if selectedPanelID == panel.id {
+            selectedPanelID = nil
+        } else {
+            selectedPanelID = panel.id
+        }
+    }
+
+    // MARK: - Reorder
+
+    private func move(_ panel: Panel, by delta: Int) {
+        var panels = sortedPanels
+        guard let idx = panels.firstIndex(where: { $0.id == panel.id }) else { return }
+        let newIdx = idx + delta
+        guard newIdx >= 0 && newIdx < panels.count else { return }
+        panels.swapAt(idx, newIdx)
+        for (i, p) in panels.enumerated() { p.order = i }
+        project.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    // MARK: - Delete
+
+    private func delete(_ panel: Panel) {
+        guard let project = panel.project else { return }
+        let url = ProjectStore.shared.panelFileURL(
+            for: project,
+            filename: panel.assetFilename
+        )
+        try? FileManager.default.removeItem(at: url)
+        PanelImageCache.shared.invalidate(panelID: panel.id)
+        selectedPanelID = nil
+        modelContext.delete(panel)
+        project.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    // MARK: - Import
 
     private func runImport(items: [PhotosPickerItem]) async {
         isImporting = true
