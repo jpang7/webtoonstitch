@@ -2,48 +2,66 @@ import SwiftUI
 
 struct PanelRowView: View {
     let panel: Panel
+    /// The on-screen width of the canvas (e.g. screen width).
     let displayWidth: CGFloat
     /// Overlap of the *next* panel down on this one, in display (screen) px.
-    /// Used to shrink our layout frame so the next panel comes up to cover
-    /// our bottom edge, producing the visual overlap.
     let nextOverlapPx: CGFloat
     let isSelected: Bool
     let onTap: () -> Void
 
     @State private var image: UIImage?
 
-    private var aspect: CGFloat {
-        guard panel.width > 0, panel.height > 0 else { return 3.0 / 4.0 }
-        return CGFloat(panel.width) / CGFloat(panel.height)
+    private var cropX: CGFloat { CGFloat(panel.cropX) }
+    private var cropY: CGFloat { CGFloat(panel.cropY) }
+    private var cropW: CGFloat { max(0.0001, CGFloat(panel.cropW)) }
+    private var cropH: CGFloat { max(0.0001, CGFloat(panel.cropH)) }
+
+    /// Aspect ratio (h/w) of the source image at its natural orientation.
+    private var imageAspect: CGFloat {
+        guard panel.width > 0 else { return 1 }
+        return CGFloat(panel.height) / CGFloat(panel.width)
     }
 
-    private var naturalDisplayHeight: CGFloat {
-        guard aspect > 0 else { return 0 }
-        return displayWidth / aspect
+    // The cropped region fills the canvas width. Its height is determined by
+    // the cropped region's aspect ratio (h/w = imageAspect * cropH/cropW).
+    private var finalDisplayWidth: CGFloat { displayWidth }
+    private var finalDisplayHeight: CGFloat {
+        displayWidth * imageAspect * cropH / cropW
     }
 
-    /// Layout height = natural - next panel's overlap.
-    /// If the next panel overlaps us by N px, we tell the VStack our height
-    /// is N less, so it places the next panel up to cover our last N px.
-    /// Visually we still draw the full image (it overflows our layout frame),
-    /// and the next panel draws on top because it's later in z-order.
+    // The source image is rendered scaled up by 1/cropW so that the crop
+    // window's width (cropW * scaled width) equals the canvas width.
+    private var scaledImageWidth: CGFloat { displayWidth / cropW }
+    private var scaledImageHeight: CGFloat { displayWidth * imageAspect / cropW }
+
+    /// Layout height = final cropped height minus the next panel's overlap.
+    /// The image overflows the bottom of the layout frame, and the next
+    /// sibling in the LazyVStack covers it, producing the overlap visual.
     private var layoutHeight: CGFloat {
-        max(1, naturalDisplayHeight - nextOverlapPx)
+        max(1, finalDisplayHeight - nextOverlapPx)
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            content
-                .frame(width: displayWidth, height: naturalDisplayHeight)
+        ZStack(alignment: .topLeading) {
+            croppedImage
+                .frame(
+                    width: finalDisplayWidth,
+                    height: finalDisplayHeight,
+                    alignment: .topLeading
+                )
+                .clipped()
 
             if isSelected {
                 Rectangle()
                     .strokeBorder(Color.accentColor, lineWidth: 2)
-                    .frame(width: displayWidth, height: naturalDisplayHeight)
+                    .frame(
+                        width: finalDisplayWidth,
+                        height: finalDisplayHeight
+                    )
                     .allowsHitTesting(false)
             }
         }
-        .frame(width: displayWidth, height: layoutHeight, alignment: .top)
+        .frame(width: finalDisplayWidth, height: layoutHeight, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .onAppear { load() }
@@ -51,13 +69,19 @@ struct PanelRowView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var croppedImage: some View {
         if let image {
             Image(uiImage: image)
                 .resizable()
-                .aspectRatio(contentMode: .fit)
+                .interpolation(.medium)
+                .frame(width: scaledImageWidth, height: scaledImageHeight)
+                .offset(
+                    x: -cropX * scaledImageWidth,
+                    y: -cropY * scaledImageHeight
+                )
         } else {
             Color.gray.opacity(0.15)
+                .frame(width: finalDisplayWidth, height: finalDisplayHeight)
                 .overlay(ProgressView())
         }
     }

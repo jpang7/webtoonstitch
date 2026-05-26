@@ -13,6 +13,7 @@ struct EditorView: View {
     @State private var importError: String?
     @State private var showingSettings = false
     @State private var selectedPanelID: UUID?
+    @State private var cropTarget: Panel?
 
     private var sortedPanels: [Panel] {
         project.panels.sorted { $0.order < $1.order }
@@ -69,6 +70,9 @@ struct EditorView: View {
         .animation(.snappy, value: selectedPanelID)
         .sheet(isPresented: $showingSettings) {
             CanvasSettingsSheet(project: project)
+        }
+        .fullScreenCover(item: $cropTarget) { panel in
+            CropSheet(panel: panel)
         }
         .onChange(of: selectedItems) { _, newItems in
             guard !newItems.isEmpty else { return }
@@ -144,11 +148,14 @@ struct EditorView: View {
         let canMoveUp = (idx ?? 0) > 0
         let canMoveDown = (idx.map { $0 < panels.count - 1 }) ?? false
 
-        let previousHeight: Double = {
+        let previousDisplayedHeight: Double = {
             guard let i = idx, i > 0 else { return 0 }
-            return Double(panels[i - 1].height)
+            let prev = panels[i - 1]
+            guard prev.width > 0, prev.cropW > 0 else { return 0 }
+            let aspect = Double(prev.height) / Double(prev.width)
+            return Double(project.canvasWidth) * aspect * prev.cropH / prev.cropW
         }()
-        let bound = max(50, previousHeight)
+        let bound = max(50, previousDisplayedHeight)
         let overlapRange = -bound ... bound
 
         PanelInspectorView(
@@ -158,6 +165,7 @@ struct EditorView: View {
             overlapRange: overlapRange,
             onMoveUp: { move(panel, by: -1) },
             onMoveDown: { move(panel, by: +1) },
+            onCrop: { cropTarget = panel },
             onDelete: { delete(panel) }
         )
     }

@@ -7,13 +7,14 @@ struct PanelInspectorView: View {
     let overlapRange: ClosedRange<Double>
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
+    let onCrop: () -> Void
     let onDelete: () -> Void
 
     @State private var confirmDelete = false
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 24) {
+            HStack(spacing: 16) {
                 Button(action: onMoveUp) {
                     Label("Up", systemImage: "arrow.up")
                         .labelStyle(.iconOnly)
@@ -25,6 +26,11 @@ struct PanelInspectorView: View {
                         .labelStyle(.iconOnly)
                 }
                 .disabled(!canMoveDown)
+
+                Button(action: onCrop) {
+                    Label("Crop", systemImage: "crop")
+                        .labelStyle(.iconOnly)
+                }
 
                 Spacer()
 
