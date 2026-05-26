@@ -3,7 +3,7 @@ import SwiftData
 import PhotosUI
 
 struct EditorView: View {
-    let project: Project
+    @Bindable var project: Project
     @Environment(\.modelContext) private var modelContext
 
     @State private var selectedItems: [PhotosPickerItem] = []
@@ -11,6 +11,7 @@ struct EditorView: View {
     @State private var importDone = 0
     @State private var importTotal = 0
     @State private var importError: String?
+    @State private var showingSettings = false
 
     private var sortedPanels: [Panel] {
         project.panels.sorted { $0.order < $1.order }
@@ -34,7 +35,13 @@ struct EditorView: View {
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Label("Project Settings", systemImage: "gearshape")
+                }
+
                 PhotosPicker(
                     selection: $selectedItems,
                     matching: .images,
@@ -44,6 +51,9 @@ struct EditorView: View {
                 }
                 .disabled(isImporting)
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            CanvasSettingsSheet(project: project)
         }
         .onChange(of: selectedItems) { _, newItems in
             guard !newItems.isEmpty else { return }
